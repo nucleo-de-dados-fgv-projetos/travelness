@@ -26,11 +26,11 @@ export const DEFAULT_BODY = [
   "",
   "Anexos: {anexos}",
   "",
+  "Nome: {solicitante}",
   "Dados bancários: Banco {banco} · Ag. {agencia} · C/c {conta}",
   "",
   "Atenciosamente,",
   "{solicitante}",
-  "CPF {cpf}",
 ].join("\n");
 
 /** Lista mostrada na tela de ajuste do modelo. */

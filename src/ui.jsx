@@ -7,7 +7,7 @@ import { backend } from "./backend.js";
 import { LOGO, LOGO_ALT } from "./logo.js";
 import {
   DEFAULT_SUBJECT, DEFAULT_BODY, PLACEHOLDERS, buildMessage, loadTemplate, saveTemplate, parseEmails,
-  isMobile, canShareFiles, enviarPeloAparelho, abrirRascunho,
+  isMobile, canShareFiles, enviarPeloAparelho, abrirRascunho, downloadBlob,
 } from "./mailkit.js";
 
 /* ------------------------------------------------------------------ util */
@@ -546,8 +546,36 @@ function ReceiptSheet({ receipt, onSaved, onDelete, onClose, push, review }) {
 /* ------------------------------------------------------------------ exportar */
 function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
   const [busy, setBusy] = useState(null);
+  const [built, setBuilt] = useState({});            // arquivos já prontos: { xlsx, pdf }
+  const [wantMail, setWantMail] = useState(false);
   const pend = receipts.filter((r) => r.revisar).length;
   const canShare = typeof navigator !== "undefined" && !!navigator.canShare;
+
+  /* O menu de compartilhar do celular só abre enquanto o toque ainda está "fresco" (no
+     iPhone, cerca de 1 segundo), e gerar o PDF com as fotos leva mais que isso. Por isso os
+     arquivos são montados ao abrir a tela, e o toque no botão só chama o menu. */
+  useEffect(() => {
+    if (!canShare && !wantMail) return;
+    let dead = false;
+    (async () => {
+      for (const k of ["xlsx", "pdf"]) {
+        try {
+          const o = await backend.buildExport(trip.id, k);
+          if (dead) return;
+          const f = new File([o.blob], o.filename, { type: o.type || o.blob.type });
+          setBuilt((b) => ({ ...b, [k]: f }));
+        } catch (e) { if (!dead) push(e.message, "err"); return; }
+      }
+    })();
+    return () => { dead = true; };
+  }, [canShare, wantMail, trip.id]);
+
+  const pronto = !!(built.xlsx && built.pdf);
+  const shareFiles = pronto ? [built.xlsx, built.pdf] : null;
+  const podeCompartilhar = canShare && pronto && canShareFiles(shareFiles);
+  const textoPadrao = useMemo(() => buildMessage({
+    template: loadTemplate(), profile, trip, receipts, products: { xlsx: true, pdf: true }, catLabels: CAT_LABEL,
+  }), [profile, trip, receipts]);
 
   async function grab(kind, share) {
     setBusy(kind + (share ? "-s" : ""));
@@ -558,19 +586,37 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
     } catch (e) { push(e.message, "err"); } finally { setBusy(null); }
   }
 
+  /* Celular: menu de compartilhar (WhatsApp, Gmail, Drive…) com os dois arquivos e o texto. */
   async function shareBoth() {
     setBusy("both");
     try {
-      const files = [];
-      for (const k of ["xlsx", "pdf"]) {
-        const o = await backend.buildExport(trip.id, k);
-        files.push(new File([o.blob], o.filename, { type: o.type || o.blob.type }));
-      }
-      if (navigator.canShare?.({ files })) await navigator.share({ files, title: trip.projeto });
-      else for (const f of files) await deliver({ blob: f, filename: f.name, type: f.type });
+      await navigator.share({ files: shareFiles, title: textoPadrao.subject, text: textoPadrao.body });
     } catch (e) {
-      if (e?.name !== "AbortError") push(e.message, "err");
+      if (e?.name === "AbortError") return;
+      push(e?.name === "NotAllowedError"
+        ? "O celular bloqueou o compartilhamento. Toque de novo."
+        : `Não consegui compartilhar: ${e?.message || e}`, "err");
     } finally { setBusy(null); }
+  }
+
+  /* Computador: o WhatsApp Web não recebe anexo por link; baixa os arquivos e abre a conversa
+     com o texto, e a pessoa arrasta os arquivos para ela. */
+  async function whatsappWeb() {
+    const aba = window.open("about:blank", "_blank");   // abre já, enquanto o clique vale
+    setBusy("wa");
+    try {
+      for (const k of ["xlsx", "pdf"]) {
+        const f = built[k] || await (async () => {
+          const o = await backend.buildExport(trip.id, k);
+          return new File([o.blob], o.filename, { type: o.type || o.blob.type });
+        })();
+        downloadBlob(f, f.name);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      const url = `https://wa.me/?text=${encodeURIComponent(textoPadrao.body.slice(0, 1800))}`;
+      if (aba) aba.location.href = url; else window.open(url, "_blank");
+      push("Arquivos baixados. Arraste-os para a conversa do WhatsApp.", "ok");
+    } catch (e) { aba?.close(); push(e.message, "err"); } finally { setBusy(null); }
   }
 
   return (
@@ -583,10 +629,29 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
         </div>
       )}
 
-      {canShare && (
-        <button className="btn primary block" onClick={shareBoth} disabled={busy !== null}
-                style={{ marginBottom: 14 }}>
-          <Icon name="share" size={18} /> {busy === "both" ? "Preparando…" : "Compartilhar planilha e PDF"}
+      {canShare ? (
+        <div style={{ marginBottom: 14 }}>
+          {podeCompartilhar || !pronto ? (
+            <button className="btn primary block" onClick={shareBoth} disabled={!podeCompartilhar || busy !== null}>
+              <Icon name="share" size={18} />{" "}
+              {!pronto ? "Preparando arquivos…" : busy === "both" ? "Abrindo…" : "Compartilhar (WhatsApp, e-mail…)"}
+            </button>
+          ) : (
+            <div className="banner info">
+              <Icon name="warn" size={18} />
+              <span>Este aparelho não aceita compartilhar esses arquivos. Use “Baixar arquivos” abaixo.</span>
+            </div>
+          )}
+          {podeCompartilhar && (
+            <p className="hint" style={{ marginTop: 8 }}>
+              Abre o menu do celular com a planilha, o PDF e o texto da viagem. Escolha o WhatsApp,
+              o Gmail ou outro app e depois o contato.
+            </p>
+          )}
+        </div>
+      ) : (
+        <button className="btn block" onClick={whatsappWeb} disabled={busy !== null} style={{ marginBottom: 14 }}>
+          <Icon name="share" size={18} /> {busy === "wa" ? "Preparando…" : "WhatsApp: baixar arquivos e abrir conversa"}
         </button>
       )}
 
@@ -606,21 +671,21 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
         </p>
       </div>
 
-      <MailCard trip={trip} receipts={receipts} profile={profile} features={features} push={push} />
+      <MailCard trip={trip} receipts={receipts} profile={profile} features={features} push={push}
+                built={built} onOpen={() => setWantMail(true)} />
     </Sheet>
   );
 }
 
 /* ------------------------------------------------------------------ e-mail */
 /** Envia pelo programa de e-mail do próprio aparelho; o servidor (SMTP) é só um extra. */
-function MailCard({ trip, receipts, profile, features, push }) {
+function MailCard({ trip, receipts, profile, features, push, built, onOpen }) {
   const [open, setOpen] = useState(false);
   const [products, setProducts] = useState({ xlsx: true, pdf: true });
   const [para, setPara] = useState(trip.email_destinatario || "");
   const [tpl, setTpl] = useState(loadTemplate);
   const [draft, setDraft] = useState(tpl);            // modelo em edição (com {marcadores})
   const [edited, setEdited] = useState(false);        // a pessoa mexeu no texto desta remessa
-  const [files, setFiles] = useState(null);           // anexos prontos (null = ainda preparando)
   const [working, setWorking] = useState(false);
 
   const gen = useCallback((t) => buildMessage({
@@ -630,24 +695,9 @@ function MailCard({ trip, receipts, profile, features, push }) {
 
   useEffect(() => { if (!edited) setMsg(gen(tpl)); }, [gen, tpl, edited]);
 
-  /* Os anexos são montados antes do clique: o menu de compartilhar do celular só abre
-     enquanto o toque ainda está "fresco", e gerar o PDF leva alguns segundos. */
-  useEffect(() => {
-    if (!open || (!products.xlsx && !products.pdf)) { setFiles(null); return; }
-    let dead = false;
-    setFiles(null);
-    (async () => {
-      try {
-        const out = [];
-        for (const k of ["xlsx", "pdf"].filter((k) => products[k])) {
-          const o = await backend.buildExport(trip.id, k);
-          out.push(new File([o.blob], o.filename, { type: o.type || o.blob.type }));
-        }
-        if (!dead) setFiles(out);
-      } catch (e) { if (!dead) push(e.message, "err"); }
-    })();
-    return () => { dead = true; };
-  }, [open, products.xlsx, products.pdf, trip.id]);
+  /* Os anexos vêm prontos do ExportSheet, montados antes do clique (ver lá o porquê). */
+  const selecionados = ["xlsx", "pdf"].filter((k) => products[k]);
+  const files = selecionados.length && selecionados.every((k) => built[k]) ? selecionados.map((k) => built[k]) : null;
 
   const { valid, invalid } = parseEmails(para);
   const to = valid.join(", ");
@@ -699,7 +749,7 @@ function MailCard({ trip, receipts, profile, features, push }) {
           Usa o e-mail do seu aparelho: informe o destinatário e envie a planilha e o PDF com o texto
           da viagem já escrito. Não precisa configurar servidor.
         </p>
-        <button className="btn primary block" onClick={() => setOpen(true)}>
+        <button className="btn primary block" onClick={() => { setOpen(true); onOpen(); }}>
           <Icon name="mail" size={18} /> Preparar e-mail
         </button>
       </div>

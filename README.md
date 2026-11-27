@@ -104,8 +104,8 @@ dos totais por categoria, do adiantamento e dos seus dados. Dá para ajustar ant
 `{projeto}` `{motivo}` `{periodo}` `{data_inicio}` `{data_fim}` `{centro_custo}` `{qtd}`
 `{categorias}` `{total}` `{adiantamento}` `{saldo}` `{acerto}` `{anexos}` `{solicitante}` `{cpf}`
 `{email}` `{banco}` `{agencia}` `{conta}`. Linha cujos marcadores ficarem vazios (sem motivo, sem
-adiantamento…) some sozinha. Os dados bancários e o CPF entram no texto por padrão: apague essas
-linhas no modelo se não quiser enviá-los.
+adiantamento…) some sozinha. Nome e dados bancários entram no texto por padrão (o CPF fica de fora, mas
+existe o marcador `{cpf}`): apague essas linhas no modelo se não quiser enviá-los.
 
 ---
 
