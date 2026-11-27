@@ -1,7 +1,7 @@
 /* Service worker do app estático.
    Guarda a casca do app e também o motor de OCR vindo da CDN, para funcionar offline.
    Nada de dados do usuário passa por aqui: os cupons ficam no IndexedDB. */
-const CACHE = "travelness-v1.4.2";
+const CACHE = "travelness-v1.4.3";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png"];
 const RUNTIME = [/tesseract/i, /tessdata/i, /jsdelivr\.net/i, /unpkg\.com/i];
 
