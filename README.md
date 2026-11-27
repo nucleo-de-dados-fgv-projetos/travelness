@@ -90,6 +90,10 @@ Exportar → **Compartilhar (WhatsApp, e-mail…)** abre o menu do aparelho com 
 texto da viagem, tudo junto. Escolha o WhatsApp, o Gmail ou outro app e depois o contato. Os arquivos
 são montados ao abrir a tela, porque o navegador só abre o menu enquanto o toque ainda é recente.
 
+**WhatsApp.** Pelo menu do celular o WhatsApp costuma ficar só com o texto quando recebe texto e
+vários arquivos. O botão **WhatsApp: PDF + texto** manda um arquivo só (o PDF, que já traz capa com
+resumo, totais e índice) com o texto na mesma mensagem. O Outlook recebe tudo pelo botão principal.
+
 **Planilha no menu.** O Chrome, o Edge e o Samsung Internet só deixam compartilhar PDF, CSV, TXT,
 imagem, áudio e vídeo; `.xlsx` é recusado com "Permission denied". Nesses navegadores o menu leva o
 PDF e a planilha em **CSV** (o Excel abre direto), e a planilha `.xlsx` completa continua em

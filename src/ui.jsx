@@ -601,6 +601,18 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
     } finally { setBusy(null); }
   }
 
+  /* WhatsApp do celular: com texto + vários arquivos ele costuma ficar só com o texto. Um arquivo só
+     (o PDF, que já traz capa com resumo, totais e índice) mais o texto é o que ele aceita. */
+  async function shareWhatsApp() {
+    setBusy("wa-app");
+    try {
+      await navigator.share({ files: [built.pdf], title: textoPadrao.subject, text: textoPadrao.body });
+    } catch (e) {
+      if (e?.name === "AbortError") return;
+      push(`Não consegui compartilhar: ${e?.message || e}`, "err");
+    } finally { setBusy(null); }
+  }
+
   /* Computador: o WhatsApp Web não recebe anexo por link; baixa os arquivos e abre a conversa
      com o texto, e a pessoa arrasta os arquivos para ela. */
   async function whatsappWeb() {
@@ -645,9 +657,15 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
             </div>
           )}
           {podeCompartilhar && (
+            <button className="btn sm block" style={{ marginTop: 8 }} onClick={shareWhatsApp} disabled={busy !== null}>
+              {busy === "wa-app" ? "Abrindo…" : "WhatsApp: PDF + texto"}
+            </button>
+          )}
+          {podeCompartilhar && (
             <p className="hint" style={{ marginTop: 8 }}>
-              Abre o menu do aparelho com a planilha, o PDF e o texto da viagem. Escolha o WhatsApp,
-              o Gmail ou outro app e depois o contato.
+              O botão de cima abre o menu do aparelho com a planilha, o PDF e o texto da viagem (e-mail,
+              Drive etc.). Se o WhatsApp ficar só com o texto, use “WhatsApp: PDF + texto”: manda o PDF
+              (capa com resumo, totais e índice) e o texto na mesma mensagem.
               {soSimples && " Neste navegador a planilha segue em CSV (o Excel abre); a .xlsx completa fica em “Baixar arquivos”."}
             </p>
           )}
