@@ -286,8 +286,3 @@ input[type="file"] { display: none; }
 .banner button { background: none; border: none; font-weight: 700; color: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
-
-/* e-mail: texto da mensagem e modelo editável */
-textarea.mailbody { min-height: 220px; line-height: 1.45; font-size: 14px; }
-.tplbox { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 4px; }
-.tplbox > summary { cursor: pointer; font-weight: 600; padding: 10px 0; }

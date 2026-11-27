@@ -86,9 +86,14 @@ No Gmail use uma **senha de app**, não a senha da conta.
 
 ## Compartilhar e enviar
 
-Exportar → **Compartilhar (WhatsApp, e-mail…)** abre o menu do aparelho com a planilha, o PDF e o
-texto da viagem. Escolha o WhatsApp, o Gmail ou outro app e depois o contato. Os arquivos são
-montados ao abrir a tela, porque o navegador só abre o menu enquanto o toque ainda é recente.
+Exportar → **Compartilhar os dois (WhatsApp, e-mail…)** abre o menu do aparelho com a planilha e o
+PDF. Escolha o WhatsApp, o Gmail ou outro app e depois o contato. Os botões **Só o PDF** e **Só a
+planilha** mandam um arquivo de cada vez, para apps que não aceitam os dois juntos.
+
+O menu leva só os arquivos, sem texto: vários apps (o WhatsApp entre eles) perdem os arquivos, ou o
+texto, quando recebem os dois juntos. O texto da viagem vai para a área de transferência: cole na
+conversa ou no e-mail. Os arquivos são montados ao abrir a tela, porque o navegador só abre o menu
+enquanto o toque ainda é recente.
 
 **Planilha no menu.** O Chrome, o Edge e o Samsung Internet só deixam compartilhar PDF, CSV, TXT,
 imagem, áudio e vídeo; `.xlsx` é recusado com "Permission denied". Nesses navegadores o menu leva o

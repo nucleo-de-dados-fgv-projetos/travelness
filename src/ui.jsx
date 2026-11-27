@@ -19,6 +19,7 @@ const CAT_LABEL = Object.fromEntries(CATS.map((c) => [c.id, c.label]));
 const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const todayISO = () => new Date().toLocaleDateString("sv-SE");
 const IS_LOCAL = backend.kind === "local";
+const APP_VERSION = (typeof document !== "undefined" && document.querySelector('meta[name="app-version"]')?.content) || "";
 
 function fmtDate(iso, opts) {
   if (!iso) return "Sem data";
@@ -587,11 +588,16 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
     } catch (e) { push(e.message, "err"); } finally { setBusy(null); }
   }
 
-  /* Celular: menu de compartilhar (WhatsApp, Gmail, Drive…) com os dois arquivos e o texto. */
-  async function shareBoth() {
-    setBusy("both");
+  /* Menu de compartilhar (WhatsApp, Gmail, Drive…). Vai só com os arquivos: vários apps, o WhatsApp
+     entre eles, perdem os arquivos (ou o texto) quando recebem os dois juntos. O texto da viagem
+     fica na área de transferência para colar na conversa ou no e-mail. */
+  async function compartilhar(arquivos, id) {
+    setBusy(id);
     try {
-      await navigator.share({ files: shareFiles, title: textoPadrao.subject, text: textoPadrao.body });
+      // as duas chamadas saem no mesmo toque: o navegador só abre o menu enquanto ele vale
+      const copiado = navigator.clipboard?.writeText(textoPadrao.body).then(() => true, () => false) ?? Promise.resolve(false);
+      await navigator.share({ files: arquivos });
+      if (await copiado) push("Texto da viagem copiado: cole na conversa.", "ok");
     } catch (e) {
       if (e?.name === "AbortError") return;
       push(e?.name === "NotAllowedError"
@@ -599,6 +605,7 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
         : `Não consegui compartilhar: ${e?.message || e}`, "err");
     } finally { setBusy(null); }
   }
+  const shareBoth = () => compartilhar(shareFiles, "both");
 
   /* Computador: o WhatsApp Web não recebe anexo por link; baixa os arquivos e abre a conversa
      com o texto, e a pessoa arrasta os arquivos para ela. */
@@ -635,7 +642,7 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
           {podeCompartilhar || !pronto ? (
             <button className="btn primary block" onClick={shareBoth} disabled={!podeCompartilhar || busy !== null}>
               <Icon name="share" size={18} />{" "}
-              {!pronto ? "Preparando arquivos…" : busy === "both" ? "Abrindo…" : "Compartilhar (WhatsApp, e-mail…)"}
+              {!pronto ? "Preparando arquivos…" : busy === "both" ? "Abrindo…" : "Compartilhar os dois (WhatsApp, e-mail…)"}
             </button>
           ) : (
             <div className="banner info">
@@ -644,11 +651,22 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
             </div>
           )}
           {podeCompartilhar && (
-            <p className="hint" style={{ marginTop: 8 }}>
-              Abre o menu do aparelho com a planilha, o PDF e o texto da viagem. Escolha o WhatsApp,
-              o Gmail ou outro app e depois o contato.
-              {soSimples && " Neste navegador a planilha segue em CSV (o Excel abre); a planilha .xlsx completa fica em “Baixar arquivos”."}
-            </p>
+            <>
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button className="btn sm" onClick={() => compartilhar([shareFiles[1]], "pdf")} disabled={busy !== null}>
+                  Só o PDF
+                </button>
+                <button className="btn sm" onClick={() => compartilhar([shareFiles[0]], "plan")} disabled={busy !== null}>
+                  Só a planilha{soSimples ? " (CSV)" : ""}
+                </button>
+              </div>
+              <p className="hint" style={{ marginTop: 8 }}>
+                Abre o menu do aparelho: escolha o WhatsApp, o Gmail ou outro app e depois o contato.
+                O texto da viagem fica copiado para você colar na mensagem. Se o app não receber os dois
+                arquivos, envie um de cada vez pelos botões acima.
+                {soSimples && " Neste navegador a planilha segue em CSV (o Excel abre); a .xlsx completa fica em “Baixar arquivos”."}
+              </p>
+            </>
           )}
         </div>
       ) : (
@@ -673,6 +691,7 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
         </p>
       </div>
 
+      {APP_VERSION && <p className="hint" style={{ textAlign: "center", marginTop: 4 }}>Travelness v{APP_VERSION}</p>}
     </Sheet>
   );
 }
@@ -1128,5 +1147,24 @@ function App() {
 createRoot(document.getElementById("root")).render(<App />);
 if ("serviceWorker" in navigator) {
   const sw = new URL("sw.js", document.baseURI).href;
-  navigator.serviceWorker.register(sw, { scope: "./" }).catch(() => {});
+  const jaTinhaVersao = !!navigator.serviceWorker.controller;   // 1ª instalação não recarrega
+  let recarregando = false;
+
+  /* Versão nova assumiu o controle: recarrega para o app mostrar a tela nova. Se houver uma
+     janela aberta (editando cupom, exportando), espera fechar para não perder o que foi digitado. */
+  function recarregarQuandoLivre() {
+    if (recarregando) return;
+    if (document.querySelector(".sheet, .scrim")) { setTimeout(recarregarQuandoLivre, 1500); return; }
+    recarregando = true;
+    location.reload();
+  }
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (jaTinhaVersao) recarregarQuandoLivre(); });
+
+  navigator.serviceWorker.register(sw, { scope: "./", updateViaCache: "none" }).then((reg) => {
+    /* O app instalado fica "dormindo" em segundo plano e nunca navega: sem isto ele só
+       procuraria versão nova quando o sistema o recriasse. Confere ao voltar para a tela. */
+    const procurar = () => reg.update().catch(() => {});
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") procurar(); });
+    setInterval(procurar, 30 * 60 * 1000);
+  }).catch(() => {});
 }
