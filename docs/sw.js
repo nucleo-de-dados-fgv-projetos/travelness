@@ -1,7 +1,7 @@
 /* Service worker do app estático.
    Guarda a casca do app e também o motor de OCR vindo da CDN, para funcionar offline.
    Nada de dados do usuário passa por aqui: os cupons ficam no IndexedDB. */
-const CACHE = "travelness-v1.4.5-ca9a3bff";   // casca do app: muda a cada build
+const CACHE = "travelness-v1.4.6-e8141700";   // casca do app: muda a cada build
 // Modelos do PaddleOCR (~31 MB) e worker do pdf.js não mudam entre versões do app: ficam num cache
 // próprio, que sobrevive às atualizações. Se trocar os modelos ou a versão do pdf.js, mude o nome.
 const ASSETS = "travelness-assets-v1";

@@ -588,16 +588,11 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
     } catch (e) { push(e.message, "err"); } finally { setBusy(null); }
   }
 
-  /* Menu de compartilhar (WhatsApp, Gmail, Drive…). Vai só com os arquivos: vários apps, o WhatsApp
-     entre eles, perdem os arquivos (ou o texto) quando recebem os dois juntos. O texto da viagem
-     fica na área de transferência para colar na conversa ou no e-mail. */
-  async function compartilhar(arquivos, id) {
-    setBusy(id);
+  /* Menu de compartilhar (WhatsApp, Gmail, Drive…): planilha, PDF e o texto da viagem, tudo junto. */
+  async function shareBoth() {
+    setBusy("both");
     try {
-      // as duas chamadas saem no mesmo toque: o navegador só abre o menu enquanto ele vale
-      const copiado = navigator.clipboard?.writeText(textoPadrao.body).then(() => true, () => false) ?? Promise.resolve(false);
-      await navigator.share({ files: arquivos });
-      if (await copiado) push("Texto da viagem copiado: cole na conversa.", "ok");
+      await navigator.share({ files: shareFiles, title: textoPadrao.subject, text: textoPadrao.body });
     } catch (e) {
       if (e?.name === "AbortError") return;
       push(e?.name === "NotAllowedError"
@@ -605,7 +600,6 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
         : `Não consegui compartilhar: ${e?.message || e}`, "err");
     } finally { setBusy(null); }
   }
-  const shareBoth = () => compartilhar(shareFiles, "both");
 
   /* Computador: o WhatsApp Web não recebe anexo por link; baixa os arquivos e abre a conversa
      com o texto, e a pessoa arrasta os arquivos para ela. */
@@ -642,7 +636,7 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
           {podeCompartilhar || !pronto ? (
             <button className="btn primary block" onClick={shareBoth} disabled={!podeCompartilhar || busy !== null}>
               <Icon name="share" size={18} />{" "}
-              {!pronto ? "Preparando arquivos…" : busy === "both" ? "Abrindo…" : "Compartilhar os dois (WhatsApp, e-mail…)"}
+              {!pronto ? "Preparando arquivos…" : busy === "both" ? "Abrindo…" : "Compartilhar (WhatsApp, e-mail…)"}
             </button>
           ) : (
             <div className="banner info">
@@ -651,22 +645,11 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
             </div>
           )}
           {podeCompartilhar && (
-            <>
-              <div className="btn-row" style={{ marginTop: 8 }}>
-                <button className="btn sm" onClick={() => compartilhar([shareFiles[1]], "pdf")} disabled={busy !== null}>
-                  Só o PDF
-                </button>
-                <button className="btn sm" onClick={() => compartilhar([shareFiles[0]], "plan")} disabled={busy !== null}>
-                  Só a planilha{soSimples ? " (CSV)" : ""}
-                </button>
-              </div>
-              <p className="hint" style={{ marginTop: 8 }}>
-                Abre o menu do aparelho: escolha o WhatsApp, o Gmail ou outro app e depois o contato.
-                O texto da viagem fica copiado para você colar na mensagem. Se o app não receber os dois
-                arquivos, envie um de cada vez pelos botões acima.
-                {soSimples && " Neste navegador a planilha segue em CSV (o Excel abre); a .xlsx completa fica em “Baixar arquivos”."}
-              </p>
-            </>
+            <p className="hint" style={{ marginTop: 8 }}>
+              Abre o menu do aparelho com a planilha, o PDF e o texto da viagem. Escolha o WhatsApp,
+              o Gmail ou outro app e depois o contato.
+              {soSimples && " Neste navegador a planilha segue em CSV (o Excel abre); a .xlsx completa fica em “Baixar arquivos”."}
+            </p>
           )}
         </div>
       ) : (
