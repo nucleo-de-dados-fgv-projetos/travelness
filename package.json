@@ -1,6 +1,6 @@
 {
   "name": "travelness",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "description": "Prestação de contas de viagens a partir de cupons fiscais (OCR).",
   "scripts": {

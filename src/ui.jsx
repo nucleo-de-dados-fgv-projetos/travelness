@@ -7,7 +7,7 @@ import { backend } from "./backend.js";
 import { LOGO, LOGO_ALT } from "./logo.js";
 import {
   DEFAULT_SUBJECT, DEFAULT_BODY, PLACEHOLDERS, buildMessage, loadTemplate, saveTemplate, parseEmails,
-  isMobile, canShareFiles, enviarPeloAparelho, abrirRascunho, downloadBlob,
+  canShareFiles, compartilhaSoTiposSimples, buildCsv, enviarPeloAparelho, baixarRascunhoEml, abrirRascunho, downloadBlob,
 } from "./mailkit.js";
 
 /* ------------------------------------------------------------------ util */
@@ -571,7 +571,12 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
   }, [canShare, wantMail, trip.id]);
 
   const pronto = !!(built.xlsx && built.pdf);
-  const shareFiles = pronto ? [built.xlsx, built.pdf] : null;
+  /* No Chrome o menu recusa .xlsx; a planilha vai como CSV (o Excel abre) e o .xlsx fica em "Baixar". */
+  const soSimples = compartilhaSoTiposSimples();
+  const csv = useMemo(() => (built.xlsx
+    ? new File([buildCsv({ receipts, catLabels: CAT_LABEL })], built.xlsx.name.replace(/\.xlsx$/i, ".csv"), { type: "text/csv" })
+    : null), [built.xlsx, receipts]);
+  const shareFiles = pronto ? [soSimples ? csv : built.xlsx, built.pdf] : null;
   const podeCompartilhar = canShare && pronto && canShareFiles(shareFiles);
   const textoPadrao = useMemo(() => buildMessage({
     template: loadTemplate(), profile, trip, receipts, products: { xlsx: true, pdf: true }, catLabels: CAT_LABEL,
@@ -594,7 +599,7 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
     } catch (e) {
       if (e?.name === "AbortError") return;
       push(e?.name === "NotAllowedError"
-        ? "O celular bloqueou o compartilhamento. Toque de novo."
+        ? "O navegador recusou os arquivos. Use “Baixar arquivos” e anexe na mão."
         : `Não consegui compartilhar: ${e?.message || e}`, "err");
     } finally { setBusy(null); }
   }
@@ -644,8 +649,9 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
           )}
           {podeCompartilhar && (
             <p className="hint" style={{ marginTop: 8 }}>
-              Abre o menu do celular com a planilha, o PDF e o texto da viagem. Escolha o WhatsApp,
+              Abre o menu do aparelho com a planilha, o PDF e o texto da viagem. Escolha o WhatsApp,
               o Gmail ou outro app e depois o contato.
+              {soSimples && " Neste navegador a planilha segue em CSV (o Excel abre); a planilha .xlsx completa fica em “Baixar arquivos”."}
             </p>
           )}
         </div>
@@ -672,14 +678,14 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
       </div>
 
       <MailCard trip={trip} receipts={receipts} profile={profile} features={features} push={push}
-                built={built} onOpen={() => setWantMail(true)} />
+                built={built} csv={csv} soSimples={soSimples} onOpen={() => setWantMail(true)} />
     </Sheet>
   );
 }
 
 /* ------------------------------------------------------------------ e-mail */
 /** Envia pelo programa de e-mail do próprio aparelho; o servidor (SMTP) é só um extra. */
-function MailCard({ trip, receipts, profile, features, push, built, onOpen }) {
+function MailCard({ trip, receipts, profile, features, push, built, csv, soSimples, onOpen }) {
   const [open, setOpen] = useState(false);
   const [products, setProducts] = useState({ xlsx: true, pdf: true });
   const [para, setPara] = useState(trip.email_destinatario || "");
@@ -698,19 +704,29 @@ function MailCard({ trip, receipts, profile, features, push, built, onOpen }) {
   /* Os anexos vêm prontos do ExportSheet, montados antes do clique (ver lá o porquê). */
   const selecionados = ["xlsx", "pdf"].filter((k) => products[k]);
   const files = selecionados.length && selecionados.every((k) => built[k]) ? selecionados.map((k) => built[k]) : null;
+  /* arquivos que o menu de compartilhar aceita (no Chrome, CSV no lugar do .xlsx) */
+  const shareFiles = files && selecionados.every((k) => k !== "xlsx" || !soSimples || csv)
+    ? selecionados.map((k) => (k === "xlsx" && soSimples ? csv : built[k])) : null;
 
   const { valid, invalid } = parseEmails(para);
   const to = valid.join(", ");
   const nenhum = !products.xlsx && !products.pdf;
   const pronto = !!files && valid.length > 0 && !nenhum && !working;
-  const celular = isMobile() && canShareFiles(files || []);
+  const viaMenu = canShareFiles(shareFiles || []);
 
   async function enviar() {
     setWorking(true);
     try {
-      const r = await enviarPeloAparelho({ to, subject: msg.subject, body: msg.body, files, nome: trip.projeto });
-      if (r.how === "shared") push(r.copied ? "Escolha o e-mail. O endereço está copiado: cole em “Para”." : "Escolha o app de e-mail.", "ok");
+      const r = await enviarPeloAparelho({ to, subject: msg.subject, body: msg.body, files, shareFiles, nome: trip.projeto });
+      if (r.how === "shared") push(r.copied ? "Escolha o app de e-mail. O endereço está copiado: cole em “Para”." : "Escolha o app de e-mail.", "ok");
       else if (r.how === "eml") push("Rascunho baixado. Abra o arquivo .eml para ele aparecer no seu e-mail.", "ok");
+    } catch (e) { push(e.message, "err"); } finally { setWorking(false); }
+  }
+  async function soEml() {
+    setWorking(true);
+    try {
+      await baixarRascunhoEml({ to, subject: msg.subject, body: msg.body, files, nome: trip.projeto });
+      push("Rascunho baixado. Abra o arquivo .eml para ele aparecer no seu e-mail.", "ok");
     } catch (e) { push(e.message, "err"); } finally { setWorking(false); }
   }
   async function planoB() {
@@ -789,14 +805,19 @@ function MailCard({ trip, receipts, profile, features, push, built, onOpen }) {
 
       <button className="btn primary block" onClick={enviar} disabled={!pronto}>
         <Icon name="mail" size={18} />{" "}
-        {working ? "Abrindo…" : !files && !nenhum ? "Preparando anexos…" : celular ? "Enviar pelo meu e-mail" : "Abrir rascunho no meu e-mail"}
+        {working ? "Abrindo…" : !files && !nenhum ? "Preparando anexos…" : viaMenu ? "Enviar pelo meu e-mail" : "Abrir rascunho no meu e-mail"}
       </button>
       <p className="hint" style={{ marginTop: 8 }}>
-        {celular
-          ? "Abre o menu do celular: escolha Gmail, Outlook ou outro app. Anexos e texto já vão preenchidos; o endereço fica copiado para você colar em “Para”."
+        {viaMenu
+          ? `Abre o menu do aparelho: escolha o app de e-mail. Anexos e texto já vão preenchidos; o endereço fica copiado para você colar em “Para”.${soSimples && products.xlsx ? " Neste navegador a planilha segue em CSV (o Excel abre); o .xlsx completo fica em “Baixar arquivos”." : ""}`
           : "Baixa um rascunho (.eml) com destinatário, texto e anexos. Ao abri-lo, aparece no Outlook, Thunderbird ou outro programa de e-mail do computador: confira e clique em Enviar."}
       </p>
 
+      {viaMenu && (
+        <button className="btn sm block" style={{ marginTop: 10 }} onClick={soEml} disabled={!pronto}>
+          Computador com Outlook: baixar rascunho (.eml)
+        </button>
+      )}
       <button className="btn sm block" style={{ marginTop: 10 }} onClick={planoB} disabled={!pronto}>
         Uso Gmail na web: baixar anexos e abrir rascunho
       </button>

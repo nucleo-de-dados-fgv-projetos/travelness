@@ -225,25 +225,62 @@ export const isMobile = () =>
    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
    (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)); // iPad pedindo site de desktop
 
+/** O Chrome (Android, Windows, Mac), o Edge e o Samsung Internet só deixam compartilhar PDF, CSV,
+    TXT, imagem, áudio e vídeo: .xlsx dá "Permission denied". Safari e navegadores do iPhone aceitam. */
+export function compartilhaSoTiposSimples() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua)) return false;          // iPhone: motor do Safari
+  return /Chrome|Chromium|SamsungBrowser|Edg\/|OPR\//.test(ua);
+}
+
+const dataBRcsv = (iso) => dataBR(iso) || "";
+const csvCelula = (v) => {
+  const t = String(v ?? "");
+  return /[";\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+
+/** Planilha simples (CSV com ; e vírgula decimal, que o Excel em português abre direto). */
+export function buildCsv({ receipts = [], catLabels = {} }) {
+  const num = (v) => (Number(v) || 0).toFixed(2).replace(".", ",");
+  const linhas = [["Data", "Estabelecimento", "CNPJ", "Categoria", "Valor (R$)"]];
+  let total = 0;
+  for (const r of receipts) {
+    total += Number(r.valor) || 0;
+    linhas.push([dataBRcsv(r.data), r.estabelecimento || "", r.cnpj || "", catLabels[r.categoria] || r.categoria || "", num(r.valor)]);
+  }
+  linhas.push([], ["Total", "", "", "", num(total)]);
+  return "\ufeff" + linhas.map((l) => l.map(csvCelula).join(";")).join("\r\n") + "\r\n";
+}
+
 export function canShareFiles(files) {
   try { return !!(files?.length && navigator.canShare?.({ files })); } catch { return false; }
 }
 
 const nomeSeguro = (s) => String(s || "viagem").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "viagem";
 
-/** Celular → menu de compartilhar; computador → rascunho .eml. */
-export async function enviarPeloAparelho({ to, subject, body, files, nome }) {
-  if (isMobile() && canShareFiles(files)) {
+/** Menu de compartilhar do sistema quando aceita os arquivos (celular, Windows com app de e-mail);
+    senão, rascunho .eml. `shareFiles` são os arquivos que o menu aceita (no Chrome, CSV no lugar do xlsx). */
+export async function enviarPeloAparelho({ to, subject, body, files, shareFiles, nome }) {
+  const paraMenu = shareFiles || files;
+  if (canShareFiles(paraMenu)) {
     let copied = false;
     try { await navigator.clipboard.writeText(to); copied = true; } catch { /* sem permissão: segue */ }
     try {
-      await navigator.share({ files, title: subject, text: body });
+      await navigator.share({ files: paraMenu, title: subject, text: body });
       return { how: "shared", copied };
     } catch (e) {
       if (e?.name === "AbortError") return { how: "cancelled" };
-      /* o aparelho recusou os arquivos: cai para o rascunho */
+      throw Object.assign(new Error(
+        e?.name === "NotAllowedError"
+          ? "O navegador recusou os arquivos. Use “Baixar arquivos” ou o rascunho .eml."
+          : `Não consegui abrir o menu de compartilhar: ${e?.message || e}`), { cause: e });
     }
   }
+  return baixarRascunhoEml({ to, subject, body, files, nome });
+}
+
+export async function baixarRascunhoEml({ to, subject, body, files, nome }) {
   const eml = await buildEml({ to, subject, body, files });
   downloadBlob(eml, `Rascunho - ${nomeSeguro(nome)}.eml`);
   return { how: "eml" };

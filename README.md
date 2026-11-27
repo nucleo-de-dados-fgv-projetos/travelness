@@ -94,9 +94,14 @@ o e-mail do próprio aparelho, e o último clique em *Enviar* é seu:
 
 | Onde | O que acontece |
 |---|---|
-| **Celular** | abre o menu de compartilhar; escolha Gmail, Outlook etc. Planilha, PDF e texto já vão preenchidos. O menu não aceita destinatário, então o endereço fica copiado para colar em *Para* |
+| **Celular** (e Windows com app de e-mail) | abre o menu de compartilhar; escolha Gmail, Outlook, WhatsApp etc. PDF e texto já vão preenchidos. O menu não aceita destinatário, então o endereço fica copiado para colar em *Para* |
 | **Computador** | baixa um rascunho `.eml` com destinatário, assunto, texto e anexos. Ao abrir o arquivo, ele aparece pronto no Outlook (clássico), Thunderbird e similares. Alguns programas (como o Mail do Mac e o novo Outlook) abrem o `.eml` como mensagem recebida |
 | **Gmail na web** | botão *baixar anexos e abrir rascunho*: baixa os arquivos e abre um rascunho só com o texto; anexe os arquivos na mão |
+
+**Planilha no menu de compartilhar.** O Chrome, o Edge e o Samsung Internet só deixam compartilhar PDF,
+CSV, TXT, imagem, áudio e vídeo; `.xlsx` é recusado com "Permission denied". Nesses navegadores o menu
+leva o PDF e a planilha em **CSV** (o Excel abre direto), e a planilha `.xlsx` completa continua em
+*Baixar arquivos*. No Safari e nos navegadores do iPhone o `.xlsx` vai normalmente.
 
 **Texto da mensagem.** Sai da descrição da viagem (projeto, período, motivo, centro de custo),
 dos totais por categoria, do adiantamento e dos seus dados. Dá para ajustar antes de enviar. Em
