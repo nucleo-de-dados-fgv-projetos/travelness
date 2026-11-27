@@ -11,18 +11,18 @@ if exist .git (
   git init -b main || goto :erro
   git add -A || goto :erro
   git commit -F .git-commit-msg.txt || goto :erro
-  git remote add origin https://github.com/andregerardi/Travelness.git || goto :erro
+  git remote add origin https://github.com/nucleo-de-dados-fgv-projetos/travelness.git || goto :erro
 )
 
 echo.
-echo Enviando para github.com/andregerardi/Travelness ...
+echo Enviando para github.com/nucleo-de-dados-fgv-projetos/travelness ...
 git push -u origin main || goto :erro
 
 echo.
 echo ================================================================
 echo  Pronto. Agora ligue o GitHub Pages:
 echo    Settings - Pages - Source: main / docs
-echo  O app ficara em https://andregerardi.github.io/Travelness/
+echo  O app ficara em https://nucleo-de-dados-fgv-projetos.github.io/travelness/
 echo ================================================================
 pause
 exit /b 0

@@ -17,14 +17,14 @@ git diff --cached --quiet && (echo Nada novo para comitar. & goto :push)
 git commit -F .git-commit-msg.txt || goto :erro
 
 :push
-echo Enviando para github.com/andregerardi/Travelness ...
+echo Enviando para github.com/nucleo-de-dados-fgv-projetos/travelness ...
 git push || goto :erro
 
 echo.
 echo ================================================================
 echo  Pronto. O GitHub Pages reconstroi sozinho em 1-2 minutos.
 echo  Depois disso, recarregue o app no celular:
-echo    https://andregerardi.github.io/Travelness/
+echo    https://nucleo-de-dados-fgv-projetos.github.io/travelness/
 echo  (como e um app offline, pode ser preciso fechar e abrir de novo
 echo   para o service worker pegar a versao nova)
 echo ================================================================

@@ -13,7 +13,7 @@ classifica em **alimentação / combustível / transporte / outros** e entrega d
 
 ## 👉 Usar agora
 
-**<https://andregerardi.github.io/Travelness/>**
+**<https://nucleo-de-dados-fgv-projetos.github.io/travelness/>**
 
 Abra no celular e toque em *Adicionar à tela de início*. Vira um app com ícone próprio,
 funciona offline e **os cupons ficam no seu aparelho** — nada é enviado para servidor nenhum.
@@ -68,7 +68,7 @@ python app.py          # http://localhost:5000
 Para o app do GitHub Pages poder falar com ele, o servidor precisa aceitar aquela origem:
 
 ```bash
-ALLOWED_ORIGINS=https://andregerardi.github.io python app.py
+ALLOWED_ORIGINS=https://nucleo-de-dados-fgv-projetos.github.io python app.py
 ```
 
 ### E-mail

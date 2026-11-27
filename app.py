@@ -28,7 +28,7 @@ XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 # O app do GitHub Pages roda em outra origem, então precisa de CORS nas rotas que ele usa.
 # ALLOWED_ORIGINS limita quem pode falar com este servidor ("*" libera geral).
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get(
-    "ALLOWED_ORIGINS", "https://andregerardi.github.io").split(",") if o.strip()]
+    "ALLOWED_ORIGINS", "https://nucleo-de-dados-fgv-projetos.github.io").split(",") if o.strip()]
 SHARED_ROUTES = ("/api/ocr", "/api/send", "/api/health")
 
 
