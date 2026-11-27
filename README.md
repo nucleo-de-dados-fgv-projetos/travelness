@@ -30,12 +30,12 @@ O mesmo código roda de dois jeitos, a partir das mesmas fontes em `src/`:
 | Onde ficam os dados | IndexedDB, no aparelho | SQLite, em `data/` |
 | OCR | PaddleOCR no aparelho (Tesseract.js de reserva) | PaddleOCR (Tesseract de reserva) |
 | Planilha e PDF | gerados no navegador | gerados no servidor |
-| E-mail | precisa do servidor | SMTP direto |
+| E-mail | programa de e-mail do aparelho (sem servidor) | o mesmo, ou SMTP direto |
 | Instalação | nenhuma (1º uso baixa ~31 MB de modelos, depois funciona offline) | Python (+ Tesseract opcional) |
 
 Os dois são independentes. Se você usar só o app estático, nunca precisa ligar o servidor —
-só perde o OCR rápido e o envio automático por e-mail (o botão de compartilhar do celular
-resolve, anexando os arquivos no Gmail ou WhatsApp).
+só perde o OCR rápido e o envio direto por SMTP. O e-mail funciona sem servidor, pelo programa
+de e-mail do próprio aparelho (veja *Enviar por e-mail*, abaixo).
 
 **Os dois juntos:** em *Ajustes*, informe o endereço do servidor (ex.: `http://192.168.0.12:5000`).
 Quando ele estiver no ar, o app manda o OCR para lá e volta a ler no aparelho sozinho se o
@@ -71,8 +71,9 @@ Para o app do GitHub Pages poder falar com ele, o servidor precisa aceitar aquel
 ALLOWED_ORIGINS=https://nucleo-de-dados-fgv-projetos.github.io python app.py
 ```
 
-### E-mail
+### E-mail por SMTP (opcional)
 
+Só é preciso se você quiser que o servidor envie sozinho, sem abrir o programa de e-mail.
 Copie `.env.example` para `.env`, preencha e exporte:
 
 ```bash
@@ -83,11 +84,37 @@ No Gmail use uma **senha de app**, não a senha da conta.
 
 ---
 
+## Enviar por e-mail
+
+Exportar → **Preparar e-mail**. Informe o destinatário (já vem preenchido com o da viagem), confira
+o assunto e a mensagem e envie. Não precisa de servidor nem de configuração.
+
+Um site não consegue enviar e-mail sozinho nem anexar arquivo num link `mailto:`, então o envio usa
+o e-mail do próprio aparelho, e o último clique em *Enviar* é seu:
+
+| Onde | O que acontece |
+|---|---|
+| **Celular** | abre o menu de compartilhar; escolha Gmail, Outlook etc. Planilha, PDF e texto já vão preenchidos. O menu não aceita destinatário, então o endereço fica copiado para colar em *Para* |
+| **Computador** | baixa um rascunho `.eml` com destinatário, assunto, texto e anexos. Ao abrir o arquivo, ele aparece pronto no Outlook (clássico), Thunderbird e similares. Alguns programas (como o Mail do Mac e o novo Outlook) abrem o `.eml` como mensagem recebida |
+| **Gmail na web** | botão *baixar anexos e abrir rascunho*: baixa os arquivos e abre um rascunho só com o texto; anexe os arquivos na mão |
+
+**Texto da mensagem.** Sai da descrição da viagem (projeto, período, motivo, centro de custo),
+dos totais por categoria, do adiantamento e dos seus dados. Dá para ajustar antes de enviar. Em
+*Modelo do texto* você muda o padrão das próximas viagens (fica guardado no aparelho). Marcadores:
+`{projeto}` `{motivo}` `{periodo}` `{data_inicio}` `{data_fim}` `{centro_custo}` `{qtd}`
+`{categorias}` `{total}` `{adiantamento}` `{saldo}` `{acerto}` `{anexos}` `{solicitante}` `{cpf}`
+`{email}` `{banco}` `{agencia}` `{conta}`. Linha cujos marcadores ficarem vazios (sem motivo, sem
+adiantamento…) some sozinha. Os dados bancários e o CPF entram no texto por padrão: apague essas
+linhas no modelo se não quiser enviá-los.
+
+---
+
 ## Estrutura
 
 ```
 src/                  fontes do front-end (as duas versões saem daqui)
   ui.jsx                interface React
+  mailkit.js            texto do e-mail, rascunho .eml e envio pelo aparelho
   backend.server.js     conversa com o Flask
   backend.local.js      IndexedDB + OCR + exportadores, tudo no navegador
   store.js              persistência IndexedDB

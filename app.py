@@ -109,8 +109,9 @@ def send_files():
             f"Dados bancários: Banco {profile.get('banco', '')} · Ag. {profile.get('agencia', '')} · "
             f"C/c {profile.get('conta', '')}\n\nEnviado pelo Travelness.")
     try:
-        mailer.send(to, f"Prestação de contas – {trip.get('projeto', '')} – {profile.get('nome', '')}",
-                    text, att, reply_to=profile.get("email") or None)
+        mailer.send(to, (request.form.get("subject") or "").strip()
+                    or f"Prestação de contas – {trip.get('projeto', '')} – {profile.get('nome', '')}",
+                    request.form.get("body") or text, att, reply_to=profile.get("email") or None)
     except Exception as e:
         return err(f"Falha no envio: {e}", 502)
     return jsonify({"sent_to": to})
@@ -371,8 +372,9 @@ def email(tid):
             f"Dados bancários: Banco {p.get('banco', '')} · Ag. {p.get('agencia', '')} · "
             f"C/c {p.get('conta', '')}\n\nEnviado pelo Travelness.")
     try:
-        mailer.send(to, f"Prestação de contas – {t['projeto']} – {p.get('nome', '')}", text, att,
-                    reply_to=p.get("email") or None)
+        mailer.send(to, (body.get("subject") or "").strip()
+                    or f"Prestação de contas – {t['projeto']} – {p.get('nome', '')}",
+                    body.get("body") or text, att, reply_to=p.get("email") or None)
     except Exception as e:
         return err(f"Falha no envio: {e}", 502)
     return jsonify({"sent_to": to})

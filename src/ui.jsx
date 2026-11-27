@@ -5,6 +5,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createRoot } from "react-dom/client";
 import { backend } from "./backend.js";
 import { LOGO, LOGO_ALT } from "./logo.js";
+import {
+  DEFAULT_SUBJECT, DEFAULT_BODY, PLACEHOLDERS, buildMessage, loadTemplate, saveTemplate, parseEmails,
+  isMobile, canShareFiles, enviarPeloAparelho, abrirRascunho,
+} from "./mailkit.js";
 
 /* ------------------------------------------------------------------ util */
 const CATS = [
@@ -542,11 +546,6 @@ function ReceiptSheet({ receipt, onSaved, onDelete, onClose, push, review }) {
 /* ------------------------------------------------------------------ exportar */
 function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
   const [busy, setBusy] = useState(null);
-  const [sending, setSending] = useState(false);
-  const [extra, setExtra] = useState("");
-  const [toRecipient, setToRecipient] = useState(!!trip.email_destinatario);
-  const [toMe, setToMe] = useState(!!profile.email);
-  const [products, setProducts] = useState({ xlsx: true, pdf: true });
   const pend = receipts.filter((r) => r.revisar).length;
   const canShare = typeof navigator !== "undefined" && !!navigator.canShare;
 
@@ -563,7 +562,7 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
     setBusy("both");
     try {
       const files = [];
-      for (const k of Object.keys(products).filter((k) => products[k])) {
+      for (const k of ["xlsx", "pdf"]) {
         const o = await backend.buildExport(trip.id, k);
         files.push(new File([o.blob], o.filename, { type: o.type || o.blob.type }));
       }
@@ -572,16 +571,6 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
     } catch (e) {
       if (e?.name !== "AbortError") push(e.message, "err");
     } finally { setBusy(null); }
-  }
-
-  async function sendMail() {
-    setSending(true);
-    try {
-      const sel = Object.keys(products).filter((k) => products[k]);
-      const r = await backend.sendEmail(trip.id, { recipient: toRecipient, me: toMe, extra, products: sel });
-      push(`Enviado para ${r.sent_to.join(", ")}.`, "ok");
-      onClose();
-    } catch (e) { push(e.message, "err"); } finally { setSending(false); }
   }
 
   return (
@@ -617,53 +606,175 @@ function ExportSheet({ trip, receipts, profile, features, onClose, push }) {
         </p>
       </div>
 
+      <MailCard trip={trip} receipts={receipts} profile={profile} features={features} push={push} />
+    </Sheet>
+  );
+}
+
+/* ------------------------------------------------------------------ e-mail */
+/** Envia pelo programa de e-mail do próprio aparelho; o servidor (SMTP) é só um extra. */
+function MailCard({ trip, receipts, profile, features, push }) {
+  const [open, setOpen] = useState(false);
+  const [products, setProducts] = useState({ xlsx: true, pdf: true });
+  const [para, setPara] = useState(trip.email_destinatario || "");
+  const [tpl, setTpl] = useState(loadTemplate);
+  const [draft, setDraft] = useState(tpl);            // modelo em edição (com {marcadores})
+  const [edited, setEdited] = useState(false);        // a pessoa mexeu no texto desta remessa
+  const [files, setFiles] = useState(null);           // anexos prontos (null = ainda preparando)
+  const [working, setWorking] = useState(false);
+
+  const gen = useCallback((t) => buildMessage({
+    template: t, profile, trip, receipts, products, catLabels: CAT_LABEL,
+  }), [profile, trip, receipts, products]);
+  const [msg, setMsg] = useState(() => gen(tpl));
+
+  useEffect(() => { if (!edited) setMsg(gen(tpl)); }, [gen, tpl, edited]);
+
+  /* Os anexos são montados antes do clique: o menu de compartilhar do celular só abre
+     enquanto o toque ainda está "fresco", e gerar o PDF leva alguns segundos. */
+  useEffect(() => {
+    if (!open || (!products.xlsx && !products.pdf)) { setFiles(null); return; }
+    let dead = false;
+    setFiles(null);
+    (async () => {
+      try {
+        const out = [];
+        for (const k of ["xlsx", "pdf"].filter((k) => products[k])) {
+          const o = await backend.buildExport(trip.id, k);
+          out.push(new File([o.blob], o.filename, { type: o.type || o.blob.type }));
+        }
+        if (!dead) setFiles(out);
+      } catch (e) { if (!dead) push(e.message, "err"); }
+    })();
+    return () => { dead = true; };
+  }, [open, products.xlsx, products.pdf, trip.id]);
+
+  const { valid, invalid } = parseEmails(para);
+  const to = valid.join(", ");
+  const nenhum = !products.xlsx && !products.pdf;
+  const pronto = !!files && valid.length > 0 && !nenhum && !working;
+  const celular = isMobile() && canShareFiles(files || []);
+
+  async function enviar() {
+    setWorking(true);
+    try {
+      const r = await enviarPeloAparelho({ to, subject: msg.subject, body: msg.body, files, nome: trip.projeto });
+      if (r.how === "shared") push(r.copied ? "Escolha o e-mail. O endereço está copiado: cole em “Para”." : "Escolha o app de e-mail.", "ok");
+      else if (r.how === "eml") push("Rascunho baixado. Abra o arquivo .eml para ele aparecer no seu e-mail.", "ok");
+    } catch (e) { push(e.message, "err"); } finally { setWorking(false); }
+  }
+  async function planoB() {
+    setWorking(true);
+    try {
+      const r = await abrirRascunho({ to, subject: msg.subject, body: msg.body, files });
+      push(r.truncated ? "Anexos baixados. O texto foi cortado no rascunho: cole a mensagem completa." : "Anexos baixados. Anexe-os no rascunho que abriu.", "ok");
+    } catch (e) { push(e.message, "err"); } finally { setWorking(false); }
+  }
+  async function viaServidor() {
+    setWorking(true);
+    try {
+      const sel = ["xlsx", "pdf"].filter((k) => products[k]);
+      const r = await backend.sendEmail(trip.id, {
+        recipient: false, me: false, extra: to, products: sel, subject: msg.subject, body: msg.body,
+      });
+      push(`Enviado para ${r.sent_to.join(", ")}.`, "ok");
+    } catch (e) { push(e.message, "err"); } finally { setWorking(false); }
+  }
+
+  function salvarModelo() {
+    saveTemplate(draft); setTpl(draft); setEdited(false);
+    push("Modelo salvo neste aparelho.", "ok");
+  }
+  function restaurarModelo() {
+    const orig = { subject: DEFAULT_SUBJECT, body: DEFAULT_BODY };
+    saveTemplate(null); setDraft(orig); setTpl(orig); setEdited(false);
+    push("Modelo original restaurado.", "ok");
+  }
+
+  if (!open) {
+    return (
       <div className="card tight">
         <div className="card-head"><h2>Enviar por e-mail</h2></div>
-        {!features.email ? (
-          <div className="banner info">
-            <Icon name="mail" size={18} />
-            <span>{IS_LOCAL
-              ? "Para enviar por e-mail, informe o endereço do servidor Travelness em Ajustes. Sem ele, use o botão de compartilhar acima."
-              : "Envio não configurado neste servidor. Defina SMTP_HOST e SMTP_FROM (veja o README) ou use os downloads acima."}</span>
-          </div>
-        ) : (
-          <>
-            <label className="check">
-              <input type="checkbox" checked={products.xlsx}
-                     onChange={(e) => setProducts({ ...products, xlsx: e.target.checked })} /> Anexar planilha
-            </label>
-            <label className="check">
-              <input type="checkbox" checked={products.pdf}
-                     onChange={(e) => setProducts({ ...products, pdf: e.target.checked })} /> Anexar PDF das notas
-            </label>
-            <hr style={{ border: 0, borderTop: "1px solid var(--line)", margin: "8px 0" }} />
-            <label className="check">
-              <input type="checkbox" checked={toRecipient} disabled={!trip.email_destinatario}
-                     onChange={(e) => setToRecipient(e.target.checked)} />
-              <span>Destinatário da viagem<br />
-                <small style={{ color: "var(--muted)" }}>
-                  {trip.email_destinatario || "nenhum e-mail cadastrado na viagem"}</small></span>
-            </label>
-            <label className="check">
-              <input type="checkbox" checked={toMe} disabled={!profile.email}
-                     onChange={(e) => setToMe(e.target.checked)} />
-              <span>Cópia para mim<br />
-                <small style={{ color: "var(--muted)" }}>
-                  {profile.email || "cadastre seu e-mail em Meus dados"}</small></span>
-            </label>
-            <Field label="Outros destinatários (opcional)">
-              <input value={extra} onChange={(e) => setExtra(e.target.value)}
-                     placeholder="coordenacao@org.br, chefia@org.br" />
-            </Field>
-            <button className="btn primary block" onClick={sendMail}
-                    disabled={sending || (!toRecipient && !toMe && !extra.includes("@")) ||
-                              (!products.xlsx && !products.pdf)}>
-              {sending ? "Enviando…" : "Enviar"}
-            </button>
-          </>
-        )}
+        <p className="hint" style={{ marginTop: 0 }}>
+          Usa o e-mail do seu aparelho: informe o destinatário e envie a planilha e o PDF com o texto
+          da viagem já escrito. Não precisa configurar servidor.
+        </p>
+        <button className="btn primary block" onClick={() => setOpen(true)}>
+          <Icon name="mail" size={18} /> Preparar e-mail
+        </button>
       </div>
-    </Sheet>
+    );
+  }
+
+  return (
+    <div className="card tight">
+      <div className="card-head"><h2>Enviar por e-mail</h2></div>
+
+      <Field label="Para" hint={invalid.length ? `Endereço inválido: ${invalid.join(", ")}` : "Pode informar mais de um, separado por vírgula."}>
+        <input type="text" inputMode="email" autoComplete="email" value={para} aria-invalid={!!invalid.length}
+               onChange={(e) => setPara(e.target.value)} placeholder="financeiro@organizacao.org" />
+      </Field>
+
+      <label className="check">
+        <input type="checkbox" checked={products.xlsx}
+               onChange={(e) => setProducts({ ...products, xlsx: e.target.checked })} /> Anexar planilha
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={products.pdf}
+               onChange={(e) => setProducts({ ...products, pdf: e.target.checked })} /> Anexar PDF das notas
+      </label>
+
+      <Field label="Assunto">
+        <input value={msg.subject} onChange={(e) => { setEdited(true); setMsg({ ...msg, subject: e.target.value }); }} />
+      </Field>
+      <Field label="Mensagem" hint="Escrita a partir da descrição da viagem. Pode ajustar antes de enviar.">
+        <textarea className="mailbody" rows={12} value={msg.body}
+                  onChange={(e) => { setEdited(true); setMsg({ ...msg, body: e.target.value }); }} />
+      </Field>
+      {edited && (
+        <button className="btn sm block" style={{ marginBottom: 10 }} onClick={() => setEdited(false)}>
+          Refazer o texto a partir do modelo
+        </button>
+      )}
+
+      <button className="btn primary block" onClick={enviar} disabled={!pronto}>
+        <Icon name="mail" size={18} />{" "}
+        {working ? "Abrindo…" : !files && !nenhum ? "Preparando anexos…" : celular ? "Enviar pelo meu e-mail" : "Abrir rascunho no meu e-mail"}
+      </button>
+      <p className="hint" style={{ marginTop: 8 }}>
+        {celular
+          ? "Abre o menu do celular: escolha Gmail, Outlook ou outro app. Anexos e texto já vão preenchidos; o endereço fica copiado para você colar em “Para”."
+          : "Baixa um rascunho (.eml) com destinatário, texto e anexos. Ao abri-lo, aparece no Outlook, Thunderbird ou outro programa de e-mail do computador: confira e clique em Enviar."}
+      </p>
+
+      <button className="btn sm block" style={{ marginTop: 10 }} onClick={planoB} disabled={!pronto}>
+        Uso Gmail na web: baixar anexos e abrir rascunho
+      </button>
+      {features.email && (
+        <button className="btn sm block" style={{ marginTop: 8 }} onClick={viaServidor} disabled={!pronto}>
+          <Icon name="cloud" size={16} /> Enviar direto pelo servidor
+        </button>
+      )}
+
+      <details className="tplbox">
+        <summary>Modelo do texto</summary>
+        <p className="hint" style={{ marginTop: 6 }}>
+          Vale para as próximas viagens, neste aparelho. Marcadores:{" "}
+          {PLACEHOLDERS.map((p) => `{${p}}`).join(" ")}. Linha cujo marcador estiver vazio some sozinha.
+        </p>
+        <Field label="Assunto padrão">
+          <input value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} />
+        </Field>
+        <Field label="Mensagem padrão">
+          <textarea className="mailbody" rows={12} value={draft.body}
+                    onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
+        </Field>
+        <div className="btn-row">
+          <button className="btn sm" onClick={restaurarModelo}>Restaurar original</button>
+          <button className="btn sm primary" onClick={salvarModelo}>Salvar como padrão</button>
+        </div>
+      </details>
+    </div>
   );
 }
 

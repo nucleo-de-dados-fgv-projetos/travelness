@@ -114,7 +114,7 @@ export const backend = {
   },
 
   /** O servidor Flask só recebe os arquivos já prontos e despacha. */
-  async sendEmail(tripId, { recipient, me, extra, products }) {
+  async sendEmail(tripId, { recipient, me, extra, products, subject, body }) {
     const settings = await store.getSettings();
     if (!settings.serverUrl) {
       throw new Error("Configure o endereço do servidor em Ajustes para enviar por e-mail.");
@@ -135,6 +135,8 @@ export const backend = {
     form.append("trip", JSON.stringify(trip));
     form.append("total", String(receipts.reduce((s, r) => s + r.valor, 0)));
     form.append("count", String(receipts.length));
+    if (subject) form.append("subject", subject);
+    if (body) form.append("body", body);
     for (const kind of products) {
       const { blob, filename, type } = await this.buildExport(tripId, kind);
       form.append("files", new File([blob], filename, { type }));
